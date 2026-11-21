@@ -1,0 +1,44 @@
+name: Check workflow service
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test workflow behavior and replay
+        run: ./gradlew --no-daemon test
+      - name: Check shell scripts
+        run: bash -n run-demo.sh scripts/check-prod.sh
+      - name: Validate production rendering
+        env:
+          APP_NAMESPACE: workflow-test
+          APP_IMAGE: registry.example.invalid/workflow@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          TEMPORAL_TARGET: temporal.example.invalid:7233
+          TEMPORAL_NAMESPACE: test
+          AUTH_ISSUER_URI: https://identity.example.invalid/
+          AUTH_AUDIENCE: workflow-api
+        run: ./scripts/check-prod.sh /tmp/workflow-prod.yaml --offline
+      - name: Save test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: build/reports/tests/test
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build non-root image
+        run: docker build -t workflow-service:check .

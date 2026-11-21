@@ -1,0 +1,203 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: temporal-demo-api
+  namespace: temporal-demo
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: temporal-demo-pod-reader
+  namespace: temporal-demo
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "events"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: temporal-demo-pod-reader
+  namespace: temporal-demo
+subjects:
+  - kind: ServiceAccount
+    name: temporal-demo-api
+    namespace: temporal-demo
+roleRef:
+  kind: Role
+  name: temporal-demo-pod-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal-demo-api
+  namespace: temporal-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal-demo-api
+  template:
+    metadata:
+      labels:
+        app: temporal-demo-api
+    spec:
+      terminationGracePeriodSeconds: 40
+      serviceAccountName: temporal-demo-api
+      containers:
+        - name: api
+          image: temporal-demo:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: local
+            - name: APP_MODE
+              value: api
+            # Turn this off outside the local recovery exercise.
+            - name: APP_ALLOW_CRASH
+              value: "true"
+            - name: TEMPORAL_TARGET
+              value: temporal:7233
+            - name: WORKFLOW_TASK_QUEUE
+              value: user-demo-queue
+            - name: WORKER_CONTROL_BASE_URL
+              value: http://temporal-demo-worker-control:8080
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              memory: "768Mi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal-demo-api
+  namespace: temporal-demo
+spec:
+  selector:
+    app: temporal-demo-api
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal-demo-worker-control
+  namespace: temporal-demo
+spec:
+  selector:
+    app: temporal-demo-worker
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal-demo-worker
+  namespace: temporal-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal-demo-worker
+  template:
+    metadata:
+      labels:
+        app: temporal-demo-worker
+    spec:
+      terminationGracePeriodSeconds: 40
+      automountServiceAccountToken: false
+      containers:
+        - name: worker
+          image: temporal-demo:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: local
+            - name: APP_MODE
+              value: worker
+            # Enable only in this local recovery exercise.
+            - name: APP_ALLOW_CRASH
+              value: "true"
+            - name: TEMPORAL_TARGET
+              value: temporal:7233
+            - name: WORKFLOW_TASK_QUEUE
+              value: user-demo-queue
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              memory: "768Mi"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - containerPort: 8080
+          startupProbe:
+            httpGet:
+              path: /
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /worker/control/status
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10

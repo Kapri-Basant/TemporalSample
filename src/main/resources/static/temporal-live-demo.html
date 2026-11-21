@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Temporal Workflow Operations</title>
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; margin: 24px auto; padding: 0 20px; max-width: 1200px; color: #111827; background: #f8fafc; }
+    h1, h2 { margin: 0 0 12px; }
+    h2 { font-size: 18px; }
+    .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin-bottom: 12px; }
+    label { display: grid; gap: 5px; font-size: 13px; color: #374151; }
+    input, button { padding: 9px 12px; font: inherit; border: 1px solid #94a3b8; border-radius: 5px; }
+    input[type=number] { width: 110px; }
+    button { cursor: pointer; background: #fff; color: #111827; }
+    button.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+    button.danger { color: #991b1b; border-color: #fca5a5; }
+    button:disabled { cursor: wait; opacity: .5; }
+    .box { border: 1px solid #d1d5db; border-radius: 8px; padding: 18px; margin-top: 18px; background: #fff; }
+    .step { display: grid; grid-template-columns: 24px 1fr minmax(260px, 1.4fr) auto; gap: 12px; align-items: center; padding: 12px; border-radius: 6px; margin-top: 8px; border: 1px solid #d1d5db; }
+    .done { background: #f0fdf4; border-color: #86efac; }
+    .running { background: #fffbeb; border-color: #fcd34d; }
+    .waiting { background: #f8fafc; }
+    .stopped { background: #fef2f2; border-color: #fca5a5; }
+    .step-detail { color: #374151; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+    .step-name { font-weight: 600; font-size: 14px; }
+    .loader { width: 18px; height: 18px; border: 3px solid #cbd5e1; border-top-color: #b45309; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .log { background: #0f172a; color: #e2e8f0; padding: 14px; border-radius: 6px; min-height: 170px; max-height: 420px; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.7 monospace; }
+    .small { color: #475569; font-size: 13px; line-height: 1.5; }
+    #workerStatus, #statusText { line-height: 1.7; overflow-wrap: anywhere; }
+    #syncStatus { margin-top: 6px; }
+    @media (max-width: 760px) { body { padding: 0 12px; } .step { grid-template-columns: 24px 1fr; } .step-detail { grid-column: 2; } .step button { grid-column: 2; justify-self: start; } }
+    @media (prefers-reduced-motion: reduce) { .loader { animation: none; } }
+  </style>
+</head>
+<body>
+<h1>Workflow Operations</h1>
+<p class="small">The five order activities are simulated. Watch saved workflow events and real worker recovery. <a href="/temporal-what-is.html">How Temporal works</a></p>
+
+<section class="box" aria-labelledby="setupTitle">
+  <h2 id="setupTitle">Start or view an order</h2>
+  <div class="row"><label for="userId">User ID<input id="userId" value="user-1" maxlength="80" pattern="[A-Za-z0-9_-]+" autocomplete="off" /></label></div>
+  <div class="row">
+    <label for="t1">Validate: wait (sec)<input id="t1" type="number" min="3" max="120" step="1" value="20" /></label>
+    <label for="t2">Reserve: wait (sec)<input id="t2" type="number" min="3" max="120" step="1" value="20" /></label>
+    <label for="t3">Payment: wait (sec)<input id="t3" type="number" min="3" max="120" step="1" value="20" /></label>
+    <label for="t4">Pack: wait (sec)<input id="t4" type="number" min="3" max="120" step="1" value="20" /></label>
+    <label for="t5">Send: wait (sec)<input id="t5" type="number" min="3" max="120" step="1" value="20" /></label>
+  </div>
+  <p class="small">An activity does one piece of work. Each timer is a saved wait after that activity. Changing these inputs affects a new workflow only.</p>
+  <p class="small">Temporal saves events. After a worker stops, it uses those events to rebuild progress (replay). Saved activity results are reused. Unfinished activities may retry, so real payment or stock calls must safely handle the same request again.</p>
+  <div class="row">
+    <button id="startButton" class="primary" type="button">Start workflow</button>
+    <button id="refreshButton" type="button">Refresh status</button>
+    <button id="crashButton" class="danger" type="button">Crash worker process</button>
+    <a href="http://localhost:8233" target="_blank" rel="noopener">Temporal UI</a>
+  </div>
+</section>
+
+<section class="box" aria-labelledby="statusTitle">
+  <h2 id="statusTitle">Worker and steps</h2>
+  <div id="workerStatus" role="status">Checking worker...</div>
+  <div id="statusText" role="status">Checking saved workflow...</div>
+  <div id="syncStatus" class="small"></div>
+  <div id="steps"></div>
+</section>
+
+<section class="box" aria-labelledby="logTitle">
+  <h2 id="logTitle">Event log</h2>
+  <p class="small">[Temporal] comes from saved event history, including task dispatch, results, timers and failures. [Temporal live state] shows the current activity attempt from the server. [Kubernetes] reports observed pod state. [Browser] records requests and checks on this page. Idle queue polls are not workflow events. The newest 500 lines are shown; the full workflow history is in Temporal UI.</p>
+  <div id="log" class="log" role="log" aria-label="Workflow event log"></div>
+</section>
+
+<script>
+  const steps = [
+    ["STEP_1_VALIDATE_USER", "Validate user"],
+    ["STEP_2_RESERVE_ITEM", "Reserve item"],
+    ["STEP_3_TAKE_PAYMENT", "Take payment"],
+    ["STEP_4_PACK_BOX", "Pack box"],
+    ["STEP_5_SEND_ORDER", "Send order"]
+  ];
+  const terminal = new Set(["DONE", "FAILED", "CANCELED", "TERMINATED", "TIMED_OUT"]);
+  // Find a page element by its name.
+  const byId = id => document.getElementById(id);
+  const storage = {
+    // Read a browser value when storage is available.
+    get(key) { try { return localStorage.getItem(key); } catch (_) { return null; } },
+    // Save a browser value without blocking the page.
+    set(key, value) { try { localStorage.setItem(key, value); } catch (_) { /* Saved server history remains available. */ } }
+  };
+  let activeUser = "";
+  let generation = 0;
+  let polling = false;
+  let pendingPoll = false;
+  let pollTimer;
+  let current = null;
+  let worker = null;
+  let browserLogs = [];
+  let serverLogs = [];
+  let lastObservation = "";
+  let crashBusy = false;
+  let startBusy = false;
+  let lastError = "";
+
+  // Read the selected user.
+  function getUser() { return byId("userId").value.trim(); }
+  // Keep user IDs safe and small.
+  function userValid(user) { return /^[A-Za-z0-9_-]{1,80}$/.test(user); }
+  // Read saved data and handle old or broken values.
+  function readJson(key, fallback) {
+    try { return JSON.parse(storage.get(key)) || fallback; } catch (_) { return fallback; }
+  }
+  // Keep each user's last workflow separate.
+  function cacheKey(user) { return "temporal-last-status-" + user; }
+  // Keep each user's browser notes separate.
+  function logsKey(user) { return "temporal-observations-" + user; }
+  // Keep observed server events while the next worker is starting.
+  function serverLogsKey(user) { return "temporal-server-events-" + user; }
+
+  // Save each observed event once so a later empty check cannot erase it.
+  function rememberEvents(lines, source) {
+    const known = new Set(serverLogs.map(entry => entry.key));
+    for (const line of lines || []) {
+      const key = source + "|" + (line.match(/\|id=([^|]+)/)?.[1] || line);
+      if (!known.has(key)) {
+        serverLogs.push({key, source, line});
+        known.add(key);
+      }
+    }
+    if (serverLogs.length > 400) serverLogs.splice(0, serverLogs.length - 400);
+    storage.set(serverLogsKey(activeUser), JSON.stringify(serverLogs));
+  }
+
+  // Save a short browser observation for this user.
+  function note(message, user = activeUser) {
+    if (!user) return;
+    const entry = {time: new Date().toISOString(), message};
+    const logs = user === activeUser ? browserLogs : readJson(logsKey(user), []);
+    logs.push(entry);
+    if (logs.length > 200) logs.splice(0, logs.length - 200);
+    storage.set(logsKey(user), JSON.stringify(logs));
+    if (user === activeUser) { browserLogs = logs; renderLog(); }
+  }
+
+  // Read the time at the start of a saved event.
+  function eventTime(line) {
+    const time = Date.parse(line.split("|")[0]);
+    return Number.isNaN(time) ? 0 : time;
+  }
+  // Show saved server events and browser notes with their sources.
+  function renderLog() {
+    const lines = (current?.timeline || []).map((line, index) => ({
+      time: eventTime(line), index, text: "[Temporal] " + line
+    }));
+    for (const entry of serverLogs) {
+      lines.push({time: eventTime(entry.line), index: lines.length, text: `[${entry.source}] ` + entry.line});
+    }
+    for (const entry of browserLogs) {
+      lines.push({time: Date.parse(entry.time), index: lines.length, text: `[Browser] ${entry.time} | ${entry.message}`});
+    }
+    lines.sort((a, b) => b.time - a.time || b.index - a.index);
+    byId("log").textContent = lines.slice(0, 500).map(line => line.text).join("\n") || "Waiting for saved events...";
+  }
+
+  // Ignore placeholder worker names.
+  function knownPod(name) {
+    return name && !["unknown", "worker-pod", "unknown-pod", "not-applicable", "temporal-service"].includes(name);
+  }
+  // Find the worker recorded for this step.
+  function recordedPod(step) {
+    if (knownPod(current?.stepPods?.[step])) return current.stepPods[step];
+    const events = current?.timeline || [];
+    for (let index = events.length - 1; index >= 0; index--) {
+      const line = events[index];
+      if (line.includes(`step=${step}`)) {
+        const match = line.match(/\|pod=([^|]+)/);
+        if (match && knownPod(match[1])) return match[1];
+      }
+    }
+    return "not recorded yet";
+  }
+  // Show the current worker check without guessing its pod state.
+  function podSummary() {
+    if (!worker) return "Worker status: not checked";
+    const phase = worker.podStatus || "unknown";
+    const count = worker.restartCount ?? worker.restarts;
+    const countText = count === undefined ? "" : ` | Restarts: ${count}`;
+    const source = worker.source === "KUBERNETES" ? "Kubernetes" : "HTTP check; pod phase not verified";
+    return `Current pod: ${worker.podName || "unknown"} | ${phase}${countText} | Worker: ${worker.workerStatus || "UNKNOWN"} | ${source}`;
+  }
+
+  // Show each step, its saved worker, and the current pod check.
+  function renderSteps() {
+    const root = byId("steps");
+    root.textContent = "";
+    const nowAt = current?.currentStep || "NOT_STARTED";
+    const done = current?.completedSteps || [];
+    steps.forEach(([step, title], index) => {
+      const row = document.createElement("div");
+      row.className = "step waiting";
+      const icon = document.createElement("div");
+      const name = document.createElement("div");
+      name.className = "step-name";
+      name.textContent = `${index + 1}. ${title}`;
+      const detail = document.createElement("div");
+      detail.className = "step-detail";
+      const active = nowAt === step && !terminal.has(nowAt);
+      let state = current?.stepStates?.[step];
+      if (!state) state = active ? (done.includes(step) ? "WAITING_TIMER" : "ACTIVITY_PENDING") : done.includes(step) ? "COMPLETED" : "WAITING";
+      let label = state.replaceAll("_", " ").toLowerCase();
+      if (active && state === "COMPLETED") label = "wait finished; waiting for the next workflow task";
+      if (active) {
+        row.className = "step running";
+        icon.className = "loader";
+        icon.setAttribute("aria-label", "Step in progress");
+        if (worker && worker.workerStatus !== "UP") label += " — worker unavailable; saved state kept";
+      } else if (done.includes(step)) {
+        row.className = "step done";
+        icon.textContent = "✓";
+      } else if (terminal.has(nowAt) && nowAt !== "DONE") {
+        row.className = "step stopped";
+        label = `not completed; workflow ${nowAt.toLowerCase()}`;
+      }
+      for (const text of [label, `Recorded worker: ${recordedPod(step)}`, podSummary()]) {
+        const line = document.createElement("div");
+        line.textContent = text;
+        detail.appendChild(line);
+      }
+      const crash = document.createElement("button");
+      crash.type = "button";
+      crash.className = "danger row-crash";
+      crash.textContent = "Crash worker";
+      crash.title = "Crash the current worker process; Kubernetes decides when to restart it";
+      crash.disabled = crashBusy || !active || worker?.workerStatus !== "UP" || worker?.crashEnabled === false;
+      crash.addEventListener("click", crashWorker);
+      row.append(icon, name, detail, crash);
+      root.appendChild(row);
+    });
+    byId("crashButton").disabled = crashBusy || worker?.workerStatus !== "UP" || worker?.crashEnabled === false;
+    byId("startButton").disabled = startBusy;
+  }
+
+  // Refresh the status text, step rows, and log.
+  function renderStatus(cached = false) {
+    byId("workerStatus").textContent = podSummary();
+    byId("statusText").textContent = current
+      ? `Workflow: ${current.workflowId} | Current: ${current.currentStep} | Activities complete: ${(current.completedActivities || current.completedSteps || []).filter(step => step !== "DONE").length}/5${cached ? " | Cached" : ""}`
+      : "No workflow found for this user.";
+    renderSteps();
+    renderLog();
+  }
+
+  // Switch users and show saved data before the next server check.
+  function selectUser() {
+    const user = getUser();
+    if (user === activeUser) return;
+    generation++;
+    activeUser = user;
+    current = readJson(cacheKey(user), null);
+    browserLogs = readJson(logsKey(user), []);
+    serverLogs = readJson(serverLogsKey(user), []);
+    rememberEvents(current?.observations, "Temporal live state");
+    lastError = "";
+    lastObservation = "";
+    storage.set("temporal-last-user", user);
+    const url = new URL(window.location.href);
+    url.searchParams.set("user", user);
+    window.history.replaceState(null, "", url);
+    byId("syncStatus").textContent = "Checking saved event history...";
+    renderStatus(true);
+  }
+
+  // Call the API with a timeout and read its reply.
+  async function request(url, options = {}) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const response = await fetch(url, {...options, signal: controller.signal, cache: "no-store"});
+      const text = await response.text();
+      let data;
+      try { data = text ? JSON.parse(text) : {}; } catch (_) { data = {message: "Invalid server response"}; }
+      return {response, data};
+    } finally { clearTimeout(timeout); }
+  }
+
+  // Read the live worker check and ignore replies for an old user.
+  async function checkWorker(user, version) {
+    try {
+      const {response, data} = await request("/demo/worker-status");
+      if (version !== generation || user !== activeUser) return;
+      if (!response.ok) throw new Error(`Worker check HTTP ${response.status}`);
+      worker = data;
+      rememberEvents(data.timeline, data.source === "KUBERNETES" ? "Kubernetes" : "Worker");
+      const observation = JSON.stringify([data.podName, data.podStatus, data.workerStatus, data.restartCount ?? data.restarts]);
+      if (observation !== lastObservation) {
+        note(`Observed ${podSummary()}`);
+        lastObservation = observation;
+      }
+    } catch (error) {
+      if (version !== generation || user !== activeUser) return;
+      worker = {workerStatus: "UNKNOWN", podStatus: "status API unavailable", podName: "unknown"};
+      if (lastObservation !== "status-api-unavailable") {
+        note("Worker status API unavailable; pod state and restart are not confirmed.");
+        lastObservation = "status-api-unavailable";
+      }
+    }
+  }
+
+  // Read saved Temporal events even when the worker is down.
+  async function checkHistory(user, version) {
+    try {
+      const {response, data} = await request(`/demo/status/${encodeURIComponent(user)}`);
+      if (version !== generation || user !== activeUser) return;
+      if (response.status === 404) {
+        current = null;
+        storage.set(cacheKey(user), "null");
+        byId("syncStatus").textContent = "No saved workflow. Start one with this user ID.";
+        return;
+      }
+      if (!response.ok) throw new Error(`History HTTP ${response.status}: ${data.message || data.detail || "unavailable"}`);
+      current = data;
+      rememberEvents(data.observations, "Temporal live state");
+      storage.set(cacheKey(user), JSON.stringify(data));
+      lastError = "";
+      byId("syncStatus").textContent = `Saved history checked at ${new Date().toLocaleTimeString()}`;
+    } catch (error) {
+      if (version !== generation || user !== activeUser) return;
+      byId("syncStatus").textContent = `History check failed. ${current ? "Showing cached state; it may be old." : "No cached state available."}`;
+      const message = String(error);
+      if (message !== lastError) { note(message); lastError = message; }
+    }
+  }
+
+  // Check worker and history together without overlapping polls.
+  async function statusNow() {
+    selectUser();
+    clearTimeout(pollTimer);
+    if (polling) { pendingPoll = true; return; }
+    const user = activeUser;
+    if (!userValid(user)) {
+      byId("syncStatus").textContent = "Use 1–80 letters, numbers, _ or - for the user ID.";
+      pollTimer = setTimeout(statusNow, 2000);
+      return;
+    }
+    polling = true;
+    const version = generation;
+    try {
+      await Promise.all([checkWorker(user, version), checkHistory(user, version)]);
+      if (version === generation && user === activeUser) renderStatus();
+    } finally {
+      polling = false;
+      const delay = pendingPoll ? 0 : 2000;
+      pendingPoll = false;
+      pollTimer = setTimeout(statusNow, delay);
+    }
+  }
+
+  // Validate the inputs and request a new workflow.
+  async function startFlow() {
+    selectUser();
+    const user = activeUser;
+    const timers = [1, 2, 3, 4, 5].map(index => Number(byId(`t${index}`).value));
+    if (!userValid(user) || timers.some(value => !Number.isInteger(value) || value < 3 || value > 120)) {
+      note("Use a valid user ID and five whole-second waits from 3 to 120.");
+      return;
+    }
+    startBusy = true;
+    renderSteps();
+    note("Start workflow requested.", user);
+    try {
+      const {response, data} = await request("/demo/start", {
+        method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({userId: user, stepTimersSec: timers})
+      });
+      if (!response.ok) throw new Error(`Start HTTP ${response.status}: ${data.message || data.detail || "request failed"}`);
+      note(`Start accepted. Run: ${data.runId || "see history"}`, user);
+    } catch (error) { note(`Start failed: ${error}`, user); }
+    finally { startBusy = false; renderSteps(); statusNow(); }
+  }
+
+  // Request a process crash and wait for later checks to show recovery.
+  async function crashWorker() {
+    if (crashBusy) return;
+    const user = activeUser;
+    crashBusy = true;
+    renderSteps();
+    note("Crash request sent to the worker control API.", user);
+    try {
+      const {response, data} = await request("/demo/admin/crash-worker", {method: "POST"});
+      if (!response.ok) throw new Error(`HTTP ${response.status}: ${data.message || data.detail || "request failed"}`);
+      note("Crash request accepted. Waiting for observed pod state and restart count; acceptance does not confirm a restart.", user);
+    } catch (error) { note(`Crash request failed: ${error}`, user); }
+    finally { crashBusy = false; renderSteps(); statusNow(); }
+  }
+
+  byId("startButton").addEventListener("click", startFlow);
+  byId("refreshButton").addEventListener("click", statusNow);
+  byId("crashButton").addEventListener("click", crashWorker);
+  byId("userId").addEventListener("change", statusNow);
+  byId("userId").addEventListener("keydown", event => { if (event.key === "Enter") statusNow(); });
+  window.addEventListener("storage", event => {
+    if (event.key === logsKey(activeUser)) { browserLogs = readJson(event.key, []); renderLog(); }
+    if (event.key === serverLogsKey(activeUser)) { serverLogs = readJson(event.key, []); renderLog(); }
+  });
+  const initial = new URLSearchParams(window.location.search).get("user") || storage.get("temporal-last-user") || "user-1";
+  byId("userId").value = initial;
+  selectUser();
+  statusNow();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+.git
+.gradle
+build
+out
+.idea
+
+backups
+*.dump
+temporal-db-backup.*
+
+.secrets
+.env*
+*.pem
+*.key
+rendered-prod.yaml

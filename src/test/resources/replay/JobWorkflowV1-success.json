@@ -1,0 +1,336 @@
+{
+  "events": [
+    {
+      "eventId": "1",
+      "eventTime": "2026-11-21T08:39:05.564Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_STARTED",
+      "workflowExecutionStartedEventAttributes": {
+        "workflowType": {
+          "name": "JobWorkflowV1"
+        },
+        "taskQueue": {
+          "name": "integration-tests"
+        },
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg\u003d\u003d"
+              },
+              "data": "eyJqb2JJZCI6ImpvYi1zdWNjZXNzIiwib3duZXJJZCI6Im93bmVyIiwic3RlcHMiOlt7InRhc2siOiJjaGVjayIsImlucHV0Ijp7fSwid2FpdFNlY29uZHMiOjIwLCJ1bmRvIjpmYWxzZSwic2lkZUVmZmVjdCI6ZmFsc2V9LHsidGFzayI6InJlc2VydmUiLCJpbnB1dCI6e30sIndhaXRTZWNvbmRzIjowLCJ1bmRvIjp0cnVlLCJzaWRlRWZmZWN0Ijp0cnVlfV19"
+            }
+          ]
+        },
+        "workflowExecutionTimeout": "315360000s",
+        "workflowRunTimeout": "315360000s",
+        "workflowTaskTimeout": "10s",
+        "originalExecutionRunId": "fb73d584-57de-49d5-9feb-82cd8576529a",
+        "identity": "9208@Basants-MacBook-Pro.local",
+        "firstExecutionRunId": "fb73d584-57de-49d5-9feb-82cd8576529a",
+        "attempt": 1,
+        "header": {}
+      }
+    },
+    {
+      "eventId": "2",
+      "eventTime": "2026-11-21T08:39:05.564Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "integration-tests"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "3",
+      "eventTime": "2026-11-21T08:39:05.565Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "2",
+        "identity": "9208@Basants-MacBook-Pro.local"
+      }
+    },
+    {
+      "eventId": "4",
+      "eventTime": "2026-11-21T08:39:05.567Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "2",
+        "identity": "9208@Basants-MacBook-Pro.local",
+        "sdkMetadata": {
+          "langUsedFlags": [
+            1
+          ]
+        },
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "5",
+      "eventTime": "2026-11-21T08:39:05.567Z",
+      "eventType": "EVENT_TYPE_ACTIVITY_TASK_SCHEDULED",
+      "activityTaskScheduledEventAttributes": {
+        "activityId": "90c898bf-a02c-3491-bbf2-647b06274092",
+        "activityType": {
+          "name": "Execute"
+        },
+        "taskQueue": {
+          "name": "integration-tests"
+        },
+        "header": {},
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg\u003d\u003d"
+              },
+              "data": "eyJqb2JJZCI6ImpvYi1zdWNjZXNzIiwib3duZXJJZCI6Im93bmVyIiwiaW5kZXgiOjAsInRhc2siOiJjaGVjayIsImlucHV0Ijp7fSwiaWRlbXBvdGVuY3lLZXkiOiJlZmM5NjdmMDdjMmFkODM3Y2JmODQ4NzcyMTM0NmQ5N2JmYjlmYTEyY2I5MTNhNTg5N2QwOTQ3OWIyOWQxNjczIiwicHJldmlvdXNSZWNlaXB0cyI6e319"
+            }
+          ]
+        },
+        "scheduleToCloseTimeout": "300s",
+        "scheduleToStartTimeout": "300s",
+        "startToCloseTimeout": "30s",
+        "heartbeatTimeout": "10s",
+        "workflowTaskCompletedEventId": "3",
+        "retryPolicy": {
+          "initialInterval": "1s",
+          "backoffCoefficient": 2.0,
+          "maximumInterval": "10s",
+          "maximumAttempts": 5
+        }
+      }
+    },
+    {
+      "eventId": "6",
+      "eventTime": "2026-11-21T08:39:05.567Z",
+      "eventType": "EVENT_TYPE_ACTIVITY_TASK_STARTED",
+      "activityTaskStartedEventAttributes": {
+        "scheduledEventId": "5",
+        "identity": "9208@Basants-MacBook-Pro.local",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "7",
+      "eventTime": "2026-11-21T08:39:05.568Z",
+      "eventType": "EVENT_TYPE_ACTIVITY_TASK_COMPLETED",
+      "activityTaskCompletedEventAttributes": {
+        "result": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg\u003d\u003d"
+              },
+              "data": "eyJyZWNlaXB0IjoicmVjZWlwdC0wIiwib3V0cHV0Ijp7InRhc2siOiJjaGVjayJ9LCJwb2ROYW1lIjoidGVzdC13b3JrZXIifQ\u003d\u003d"
+            }
+          ]
+        },
+        "scheduledEventId": "5",
+        "startedEventId": "6",
+        "identity": "9208@Basants-MacBook-Pro.local"
+      }
+    },
+    {
+      "eventId": "8",
+      "eventTime": "2026-11-21T08:39:05.568Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "integration-tests"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "9",
+      "eventTime": "2026-11-21T08:39:05.568Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "8",
+        "identity": "9208@Basants-MacBook-Pro.local"
+      }
+    },
+    {
+      "eventId": "10",
+      "eventTime": "2026-11-21T08:39:05.569Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "8",
+        "identity": "9208@Basants-MacBook-Pro.local",
+        "sdkMetadata": {},
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "11",
+      "eventTime": "2026-11-21T08:39:05.569Z",
+      "eventType": "EVENT_TYPE_TIMER_STARTED",
+      "timerStartedEventAttributes": {
+        "timerId": "d43324b4-2da0-3ea9-b519-5e65b6fc5838",
+        "startToFireTimeout": "20s",
+        "workflowTaskCompletedEventId": "9"
+      }
+    },
+    {
+      "eventId": "12",
+      "eventTime": "2026-11-21T08:39:25.570Z",
+      "eventType": "EVENT_TYPE_TIMER_FIRED",
+      "timerFiredEventAttributes": {
+        "timerId": "d43324b4-2da0-3ea9-b519-5e65b6fc5838",
+        "startedEventId": "11"
+      }
+    },
+    {
+      "eventId": "13",
+      "eventTime": "2026-11-21T08:39:25.570Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "integration-tests"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "14",
+      "eventTime": "2026-11-21T08:39:25.570Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "13",
+        "identity": "9208@Basants-MacBook-Pro.local"
+      }
+    },
+    {
+      "eventId": "15",
+      "eventTime": "2026-11-21T08:39:25.572Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "13",
+        "identity": "9208@Basants-MacBook-Pro.local",
+        "sdkMetadata": {},
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "16",
+      "eventTime": "2026-11-21T08:39:25.572Z",
+      "eventType": "EVENT_TYPE_ACTIVITY_TASK_SCHEDULED",
+      "activityTaskScheduledEventAttributes": {
+        "activityId": "4c44da56-0604-392a-a652-f5e7b46c962d",
+        "activityType": {
+          "name": "Execute"
+        },
+        "taskQueue": {
+          "name": "integration-tests"
+        },
+        "header": {},
+        "input": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg\u003d\u003d"
+              },
+              "data": "eyJqb2JJZCI6ImpvYi1zdWNjZXNzIiwib3duZXJJZCI6Im93bmVyIiwiaW5kZXgiOjEsInRhc2siOiJyZXNlcnZlIiwiaW5wdXQiOnt9LCJpZGVtcG90ZW5jeUtleSI6IjVjMjIzYWRjZWI0YjAzOThlYjFkNjI0YjdiMzdmNmNjMjYxZDVjYWE0YWE0YTczOWJiMjg1OTk0Yjc1NDIwMzAiLCJwcmV2aW91c1JlY2VpcHRzIjp7IjAiOiJyZWNlaXB0LTAifX0\u003d"
+            }
+          ]
+        },
+        "scheduleToCloseTimeout": "300s",
+        "scheduleToStartTimeout": "300s",
+        "startToCloseTimeout": "30s",
+        "heartbeatTimeout": "10s",
+        "workflowTaskCompletedEventId": "14",
+        "retryPolicy": {
+          "initialInterval": "1s",
+          "backoffCoefficient": 2.0,
+          "maximumInterval": "10s",
+          "maximumAttempts": 5
+        }
+      }
+    },
+    {
+      "eventId": "17",
+      "eventTime": "2026-11-21T08:39:25.572Z",
+      "eventType": "EVENT_TYPE_ACTIVITY_TASK_STARTED",
+      "activityTaskStartedEventAttributes": {
+        "scheduledEventId": "16",
+        "identity": "9208@Basants-MacBook-Pro.local",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "18",
+      "eventTime": "2026-11-21T08:39:25.573Z",
+      "eventType": "EVENT_TYPE_ACTIVITY_TASK_COMPLETED",
+      "activityTaskCompletedEventAttributes": {
+        "result": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg\u003d\u003d"
+              },
+              "data": "eyJyZWNlaXB0IjoicmVjZWlwdC0xIiwib3V0cHV0Ijp7InRhc2siOiJyZXNlcnZlIn0sInBvZE5hbWUiOiJ0ZXN0LXdvcmtlciJ9"
+            }
+          ]
+        },
+        "scheduledEventId": "16",
+        "startedEventId": "17",
+        "identity": "9208@Basants-MacBook-Pro.local"
+      }
+    },
+    {
+      "eventId": "19",
+      "eventTime": "2026-11-21T08:39:25.573Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_SCHEDULED",
+      "workflowTaskScheduledEventAttributes": {
+        "taskQueue": {
+          "name": "integration-tests"
+        },
+        "startToCloseTimeout": "10s",
+        "attempt": 1
+      }
+    },
+    {
+      "eventId": "20",
+      "eventTime": "2026-11-21T08:39:25.573Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_STARTED",
+      "workflowTaskStartedEventAttributes": {
+        "scheduledEventId": "19",
+        "identity": "9208@Basants-MacBook-Pro.local"
+      }
+    },
+    {
+      "eventId": "21",
+      "eventTime": "2026-11-21T08:39:25.574Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_TASK_COMPLETED",
+      "workflowTaskCompletedEventAttributes": {
+        "scheduledEventId": "19",
+        "identity": "9208@Basants-MacBook-Pro.local",
+        "sdkMetadata": {},
+        "meteringMetadata": {}
+      }
+    },
+    {
+      "eventId": "22",
+      "eventTime": "2026-11-21T08:39:25.574Z",
+      "eventType": "EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED",
+      "workflowExecutionCompletedEventAttributes": {
+        "result": {
+          "payloads": [
+            {
+              "metadata": {
+                "encoding": "anNvbi9wbGFpbg\u003d\u003d"
+              },
+              "data": "eyJqb2JJZCI6ImpvYi1zdWNjZXNzIiwib3duZXJJZCI6Im93bmVyIiwic3RhdHVzIjoiQ09NUExFVEVEIiwiY3VycmVudFN0ZXAiOjEsInN0ZXBzIjpbeyJpbmRleCI6MCwidGFzayI6ImNoZWNrIiwic3RhdHVzIjoiQ09NUExFVEVEIiwicmVjZWlwdCI6InJlY2VpcHQtMCIsInBvZE5hbWUiOiJ0ZXN0LXdvcmtlciIsImVycm9yIjpudWxsLCJvdXRwdXQiOnsidGFzayI6ImNoZWNrIn19LHsiaW5kZXgiOjEsInRhc2siOiJyZXNlcnZlIiwic3RhdHVzIjoiQ09NUExFVEVEIiwicmVjZWlwdCI6InJlY2VpcHQtMSIsInBvZE5hbWUiOiJ0ZXN0LXdvcmtlciIsImVycm9yIjpudWxsLCJvdXRwdXQiOnsidGFzayI6InJlc2VydmUifX1dLCJlcnJvciI6bnVsbH0\u003d"
+            }
+          ]
+        },
+        "workflowTaskCompletedEventId": "20"
+      }
+    }
+  ]
+}

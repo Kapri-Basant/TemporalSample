@@ -1,0 +1,401 @@
+# Render with scripts/check-prod.sh. This file never starts a Temporal database.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ${APP_NAMESPACE}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workflow-service
+  namespace: ${APP_NAMESPACE}
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workflow-api
+  namespace: ${APP_NAMESPACE}
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: workflow-api
+  template:
+    metadata:
+      labels:
+        app: workflow-api
+        app.kubernetes.io/part-of: workflow-service
+    spec:
+      serviceAccountName: workflow-service
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 40
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: workflow-api
+      containers:
+        - name: api
+          image: ${APP_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: prod
+            - name: MANAGEMENT_ENDPOINT_HEALTH_GROUP_READINESS_INCLUDE
+              value: readinessState,temporalReadiness
+            - name: APP_MODE
+              value: api
+            - name: INTEGRATION_CURSOR_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: workflow-api
+                  key: cursor-signing-key
+            - name: APP_ALLOW_CRASH
+              value: "false"
+            - name: TEMPORAL_TARGET
+              value: ${TEMPORAL_TARGET}
+            - name: TEMPORAL_NAMESPACE
+              value: ${TEMPORAL_NAMESPACE}
+            - name: INTEGRATION_TASK_QUEUE
+              value: integration-v1
+            - name: TEMPORAL_TLS_ENABLED
+              value: "true"
+            - name: TEMPORAL_TLS_CERT_FILE
+              value: /etc/temporal/tls.crt
+            - name: TEMPORAL_TLS_KEY_FILE
+              value: /etc/temporal/tls.key
+            - name: AUTH_ISSUER_URI
+              value: ${AUTH_ISSUER_URI}
+            - name: AUTH_AUDIENCE
+              value: ${AUTH_AUDIENCE}
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: file:/etc/workflow/integration.properties
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 8081
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "1Gi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            failureThreshold: 60
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: management
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 10
+          volumeMounts:
+            - name: temporary
+              mountPath: /tmp
+            - name: temporal-tls
+              mountPath: /etc/temporal
+              readOnly: true
+            - name: integration
+              mountPath: /etc/workflow
+              readOnly: true
+      volumes:
+        - name: temporary
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: temporal-tls
+          secret:
+            secretName: temporal-client
+            defaultMode: 0440
+        - name: integration
+          configMap:
+            name: workflow-registry
+            defaultMode: 0440
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: workflow-worker-v1
+  namespace: ${APP_NAMESPACE}
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: workflow-worker-v1
+  template:
+    metadata:
+      labels:
+        app: workflow-worker-v1
+        app.kubernetes.io/part-of: workflow-service
+    spec:
+      serviceAccountName: workflow-service
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 40
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: workflow-worker-v1
+      containers:
+        - name: worker
+          image: ${APP_IMAGE}
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: prod
+            - name: MANAGEMENT_ENDPOINT_HEALTH_GROUP_READINESS_INCLUDE
+              value: readinessState,temporalReadiness,workerReadiness
+            - name: APP_MODE
+              value: worker
+            - name: APP_ALLOW_CRASH
+              value: "false"
+            - name: TEMPORAL_TARGET
+              value: ${TEMPORAL_TARGET}
+            - name: TEMPORAL_NAMESPACE
+              value: ${TEMPORAL_NAMESPACE}
+            - name: INTEGRATION_TASK_QUEUE
+              value: integration-v1
+            - name: TEMPORAL_TLS_ENABLED
+              value: "true"
+            - name: TEMPORAL_TLS_CERT_FILE
+              value: /etc/temporal/tls.crt
+            - name: TEMPORAL_TLS_KEY_FILE
+              value: /etc/temporal/tls.key
+            - name: AUTH_ISSUER_URI
+              value: ${AUTH_ISSUER_URI}
+            - name: AUTH_AUDIENCE
+              value: ${AUTH_AUDIENCE}
+            - name: SPRING_CONFIG_ADDITIONAL_LOCATION
+              value: file:/etc/workflow/integration.properties,file:/etc/workflow-auth/tokens.properties
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: management
+              containerPort: 8081
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "1Gi"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            failureThreshold: 60
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: management
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 10
+          volumeMounts:
+            - name: temporary
+              mountPath: /tmp
+            - name: temporal-tls
+              mountPath: /etc/temporal
+              readOnly: true
+            - name: integration
+              mountPath: /etc/workflow
+              readOnly: true
+            - name: adapter-auth
+              mountPath: /etc/workflow-auth
+              readOnly: true
+      volumes:
+        - name: adapter-auth
+          secret:
+            secretName: workflow-adapter-auth
+            defaultMode: 0440
+        - name: temporary
+          emptyDir:
+            sizeLimit: 128Mi
+        - name: temporal-tls
+          secret:
+            secretName: temporal-client
+            defaultMode: 0440
+        - name: integration
+          configMap:
+            name: workflow-registry
+            defaultMode: 0440
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workflow-api
+  namespace: ${APP_NAMESPACE}
+spec:
+  selector:
+    app: workflow-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workflow-api-metrics
+  namespace: ${APP_NAMESPACE}
+spec:
+  selector:
+    app: workflow-api
+  ports:
+    - name: management
+      port: 8081
+      targetPort: management
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: workflow-worker-metrics
+  namespace: ${APP_NAMESPACE}
+spec:
+  selector:
+    app: workflow-worker-v1
+  ports:
+    - name: management
+      port: 8081
+      targetPort: management
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: workflow-api
+  namespace: ${APP_NAMESPACE}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: workflow-api
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: workflow-worker-v1
+  namespace: ${APP_NAMESPACE}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: workflow-worker-v1
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: workflow-boundaries
+  namespace: ${APP_NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/part-of: workflow-service
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ${MONITORING_NAMESPACE}
+      ports:
+        - protocol: TCP
+          port: 8081
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Replace broad external destinations with your egress gateway or service CIDRs.
+    - ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 7233
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: workflow-api-ingress
+  namespace: ${APP_NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app: workflow-api
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ${INGRESS_NAMESPACE}
+      ports:
+        - protocol: TCP
+          port: 8080

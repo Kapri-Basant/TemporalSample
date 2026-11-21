@@ -1,0 +1,18 @@
+# Copy to your registry file and change these URLs. Tokens belong in the worker-only secret.
+# Caller task names select this registry; callers cannot supply URLs or credentials.
+integration.tasks.validate-user.url=https://users.example.invalid/workflow/check
+integration.tasks.validate-user.read-only=true
+
+# A writing task must have an undo URL before the API accepts it.
+integration.tasks.reserve-stock.url=https://stock.example.invalid/workflow/reserve
+integration.tasks.reserve-stock.undo-url=https://stock.example.invalid/workflow/release
+
+integration.tasks.take-payment.url=https://payments.example.invalid/workflow/charge
+integration.tasks.take-payment.undo-url=https://payments.example.invalid/workflow/refund
+
+# A real provider must decide which actions are safe to undo.
+integration.tasks.pack-box.url=https://warehouse.example.invalid/workflow/pack
+integration.tasks.pack-box.undo-url=https://warehouse.example.invalid/workflow/cancel-pack
+
+integration.tasks.send-order.url=https://shipping.example.invalid/workflow/send
+integration.tasks.send-order.undo-url=https://shipping.example.invalid/workflow/cancel-send

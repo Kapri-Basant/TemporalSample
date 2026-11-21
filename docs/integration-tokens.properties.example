@@ -1,0 +1,5 @@
+# Create a private copy. Put real tokens only in the worker's mounted Secret.
+integration.tasks.reserve-stock.token=REPLACE_IN_PRIVATE_SECRET_FILE
+integration.tasks.take-payment.token=REPLACE_IN_PRIVATE_SECRET_FILE
+integration.tasks.pack-box.token=REPLACE_IN_PRIVATE_SECRET_FILE
+integration.tasks.send-order.token=REPLACE_IN_PRIVATE_SECRET_FILE

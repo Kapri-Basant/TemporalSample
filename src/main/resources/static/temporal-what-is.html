@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>How Temporal works</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px auto; padding: 0 16px; max-width: 1100px; line-height: 1.5; color: #111827; }
+    h1, h2 { line-height: 1.2; } h2 { margin-top: 28px; }
+    table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th, .box { background: #f8fafc; } .box { border: 1px solid #d1d5db; border-radius: 8px; padding: 12px; margin: 12px 0; }
+    code { background: #f3f4f6; padding: 2px 4px; } .diagram { overflow-x: auto; } a { color: #1d4ed8; }
+  </style>
+</head>
+<body>
+<nav><a href="/temporal-live-demo.html">Open workflow operations →</a></nav>
+<h1>What Temporal does</h1>
+<p>Temporal keeps a backend process moving through failures. Your code sets the order of work. Temporal stores a history of key events: a workflow started, an activity completed, a timer fired. A worker uses that history to rebuild workflow state after a restart.</p>
+<p>The local demo models an order for one user: validate user → reserve item → take payment → pack box → send order. These business actions are <strong>simulated</strong>; they do not charge money, reserve stock, or send parcels.</p>
+
+<h2>Connect another software system</h2>
+<p>The reusable service uses <code>/api/v1/jobs</code>. Any language can call its JSON API. Each job contains one to twenty named tasks. The operator registers the task URLs and rules; callers cannot choose arbitrary URLs or credentials. Software without HTTP can use a small HTTP adapter.</p>
+<div class="box"><strong>Production call flow</strong><br />Your backend → HTTPS gateway → JWT check → Jobs API → Temporal → worker → named HTTPS adapter<br />The adapter saves its business change and idempotency key. Temporal saves the result. The backend reads job status or one page of events.</div>
+<ol>
+<li><strong>Identify the caller:</strong> validate JWT issuer, audience, and read/write scopes. Derive the owner on the server; do not trust a caller-supplied owner ID.</li>
+<li><strong>Accept one job:</strong> use a stable business job ID. Another job ID creates another job for that caller. A duplicate retained job ID returns a conflict.</li>
+<li><strong>Do each task:</strong> send the same idempotency key on every retry. The adapter must enforce it with its saved result. Logging a key does not prevent duplicate writes.</li>
+<li><strong>Save progress:</strong> Temporal records task results and durable waits. Production waits default to zero; the local visual demo keeps twenty seconds.</li>
+<li><strong>Handle failure or cancellation:</strong> run configured undo tasks in reverse order. Register undo before execute because a write can succeed even when its reply is lost. Undo must be safe if execute never happened or is still in flight.</li>
+<li><strong>Escalate uncertainty:</strong> failed undo or an explicitly irreversible action can need manual review. Read the business result as well as Temporal execution status. Force termination bypasses workflow cleanup.</li>
+</ol>
+<p>Only the local profile serves these pages and crash controls. The production profile requires JWT checks and mTLS to Temporal, separates management endpoints, and rejects unsafe configuration. The production Kubernetes template uses two API pods and two workers, mounted settings, non-root containers, and disruption/network boundaries. Your platform still supplies the real adapters, identity provider, TLS ingress, Temporal storage, backup system, and alerts.</p>
+
+<h2>Components and why they exist</h2>
+<table>
+<thead><tr><th>Component</th><th>Job in this project</th></tr></thead>
+<tbody>
+<tr><td>Browser</td><td>Starts a run and polls the API for saved progress. Closing it does not stop the workflow.</td></tr>
+<tr><td>API / Temporal client</td><td>Starts a workflow with a stable ID and reads saved event history. It does not run the business steps.</td></tr>
+<tr><td>Workflow</td><td>Sets the five steps, activity retry policy, and durable waits. Its code must make the same decisions when replayed.</td></tr>
+<tr><td>Activity</td><td>Runs work outside the workflow, such as a payment API call. Here it sleeps for about three seconds and returns a result.</td></tr>
+<tr><td>Worker</td><td>Our Java 25 process. It polls the named task queue and runs both workflow and activity code.</td></tr>
+<tr><td>Task queue</td><td>A named route between Temporal and compatible workers; no separate queue container is needed.</td></tr>
+<tr><td>Temporal Service</td><td>Accepts client requests, saves events, manages timers, and gives tasks to polling workers.</td></tr>
+<tr><td>PostgreSQL</td><td>Stores Temporal data. Keeping this data is essential: worker recovery depends on saved history.</td></tr>
+<tr><td>Kubernetes</td><td>Runs the containers and restarts a failed worker process. It does not rebuild workflow state; Temporal does.</td></tr>
+<tr><td>Temporal UI</td><td>Reads Temporal to show runs and history. Workflows continue if this UI is down.</td></tr>
+</tbody>
+</table>
+<p>Inside the Temporal Server, Frontend accepts requests, History manages workflow state, Matching routes tasks to workers, and its internal Worker service runs server background jobs. That internal service is separate from our application worker. The local auto-setup image runs the server services together. <a href="https://docs.temporal.io/temporal-service/temporal-server">Temporal Server reference</a>.</p>
+
+<h2>Local demo architecture and direction of calls</h2>
+<div class="diagram">
+<svg role="img" aria-labelledby="diagram-title diagram-desc" width="1050" height="380" viewBox="0 0 1050 380" xmlns="http://www.w3.org/2000/svg">
+  <title id="diagram-title">Project architecture</title>
+  <desc id="diagram-desc">Browser calls API. API and worker connect to Temporal. Temporal stores data in PostgreSQL. Temporal UI reads Temporal. API reads Kubernetes pod status and events.</desc>
+  <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="#334155"/></marker></defs>
+  <g fill="#f8fafc" stroke="#334155">
+    <rect x="10" y="30" width="150" height="65" rx="6"/><rect x="215" y="30" width="170" height="65" rx="6"/>
+    <rect x="460" y="30" width="230" height="65" rx="6"/><rect x="790" y="30" width="235" height="65" rx="6"/>
+    <rect x="460" y="185" width="230" height="65" rx="6"/><rect x="790" y="185" width="235" height="65" rx="6"/>
+    <rect x="215" y="305" width="210" height="65" rx="6"/>
+  </g>
+  <g fill="#0f172a" font-family="Arial" font-size="15" text-anchor="middle">
+    <text x="85" y="68">Browser</text><text x="300" y="68">API pod</text>
+    <text x="575" y="57">Temporal Service</text><text x="575" y="78" font-size="12">history / timers / task queues</text>
+    <text x="907" y="57">Application worker pod</text><text x="907" y="78" font-size="12">workflow + activities</text>
+    <text x="575" y="222">PostgreSQL + volume</text><text x="907" y="222">Temporal UI</text>
+    <text x="320" y="342">Kubernetes API</text>
+  </g>
+  <g stroke="#334155" stroke-width="2" marker-end="url(#arrow)" fill="none">
+    <path d="M160 62 H215"/><path d="M385 62 H460"/><path d="M790 62 H690"/>
+    <path d="M575 95 V185"/><path d="M790 217 H735 V100 H675"/>
+    <path d="M300 95 V305"/>
+  </g>
+  <g fill="#334155" font-family="Arial" font-size="12">
+    <text x="166" y="47">HTTP</text><text x="394" y="47">gRPC</text><text x="700" y="47">poll / reply</text>
+    <text x="584" y="145">save / read</text><text x="744" y="165">read history</text>
+    <text x="308" y="280">read pods / events</text>
+  </g>
+</svg>
+</div>
+
+<h2>Local demo run, step by step</h2>
+<ol>
+  <li>The API asks Temporal to start a workflow. Temporal saves its inputs and schedules a workflow task.</li>
+  <li>A worker polls for work. The task carries history needed to run the workflow code.</li>
+  <li>Workflow code requests an activity. The worker sends commands to Temporal; Temporal records them and schedules the activity task.</li>
+  <li>A worker receives the activity, runs it, and reports the result. Temporal records a successful result before the workflow can use it.</li>
+  <li>The workflow starts a <strong>durable wait</strong>: 20 seconds by default, after each simulated three-second activity. This is a delay between actions, not activity processing time. No worker thread needs to sleep for that timer.</li>
+  <li>When the timer expires, Temporal records it and schedules more workflow work. The five-step run finishes after the final wait.</li>
+</ol>
+<p>The task queue is handled by Temporal. It does not need a separate scheduler pod. <a href="https://docs.temporal.io/tasks">Task execution reference</a>.</p>
+
+<h2>What a crash changes</h2>
+<p>The crash button exits the worker process. Kubernetes usually restarts its container inside the same pod, so the pod name can stay the same while its restart count rises. Deleting the pod creates a replacement pod with a new name.</p>
+<p>On recovery, a worker replays workflow code against recorded history to rebuild local variables. It reuses recorded activity results and elapsed timers. It then makes new progress. This is not a saved Java memory snapshot. If no worker is available, tasks wait; timers can still expire on the Temporal Service. <a href="https://docs.temporal.io/encyclopedia/event-history">Event history reference</a>.</p>
+<p>An activity may run again if its worker crashes before its result is recorded. Its current timeout is 20 seconds, with at most five attempts. A real payment or stock write needs an idempotency key enforced by the destination, so a retry cannot apply the same change twice. Recovery may wait for a task timeout or retry delay. <a href="https://docs.temporal.io/durable-execution">Retries and recovery reference</a>.</p>
+
+<h2>How to read the operations page</h2>
+<ul>
+  <li><strong>Temporal events:</strong> saved scheduling, task, activity, and timer events. They stay readable through worker downtime. They do not record every line of code or every activity retry attempt.</li>
+  <li><strong>Pod status and events:</strong> Kubernetes observations, including container state and restart count. Kubernetes events have finite retention; they are not a permanent audit log.</li>
+  <li><strong>UI observations:</strong> polling requests, HTTP errors, and button responses. A crash request being accepted does not prove that a restart has finished.</li>
+  <li><strong>Worker logs and metrics:</strong> startup and activity details appear in container logs. Idle queue polls are not workflow history events; use SDK metrics for poll counts and latency.</li>
+</ul>
+
+<h2>What each order step means</h2>
+<table>
+<thead><tr><th>Step</th><th>Purpose in a real system</th><th>If it fails</th></tr></thead>
+<tbody>
+<tr><td>1. Validate user</td><td>Check the user can order.</td><td>Retry temporary errors; reject invalid users.</td></tr>
+<tr><td>2. Reserve item</td><td>Hold stock for this order.</td><td>Retry safely; report sold-out items.</td></tr>
+<tr><td>3. Take payment</td><td>Ask a payment provider to charge once.</td><td>Use an idempotency key; release stock if payment fails.</td></tr>
+<tr><td>4. Pack box</td><td>Ask the warehouse to prepare the parcel.</td><td>Retry the same packing job.</td></tr>
+<tr><td>5. Send order</td><td>Ask a courier to collect the parcel.</td><td>Retry the same shipment request.</td></tr>
+</tbody>
+</table>
+<p>These are intended business meanings in the local demo. Its old workflow stays compatible with saved demo histories and does not perform real business calls. New integrations use the reusable job workflow and configured execute/undo adapters. The provider must implement real stock release, refund, and shipment rules; the service cannot invent safe business rules.</p>
+<h2>Where to look in the code</h2>
+<table>
+<thead><tr><th>File</th><th>Simple purpose</th></tr></thead>
+<tbody>
+<tr><td><code>TemporalApplication.kt</code></td><td>Starts Spring Boot.</td></tr>
+<tr><td><code>TemporalConfig.kt</code></td><td>Connects to Temporal and chooses its namespace.</td></tr>
+<tr><td><code>api/JobController.kt</code>, <code>api/JobRequests.kt</code></td><td>Start caller-scoped jobs, check named tasks, page events, request cancellation.</td></tr>
+<tr><td><code>api/Caller.kt</code>, <code>api/JobCursor.kt</code></td><td>Keep caller ownership and event cursors tied to the same job.</td></tr>
+<tr><td><code>integration/JobWorkflowV1.kt</code>, <code>integration/JobWorkflowV1Impl.kt</code></td><td>Run reusable tasks and undo work using a stable v1 contract.</td></tr>
+<tr><td><code>integration/HttpJobActivities.kt</code>, <code>integration/IntegrationProperties.kt</code></td><td>Call only registered adapters with limits and stable retry keys.</td></tr>
+<tr><td><code>SecurityConfig.kt</code>, production settings</td><td>Check JWTs and keep local controls out of production.</td></tr>
+<tr><td><code>k8s/prod/app.yaml.template</code>, <code>scripts/check-prod.sh</code></td><td>Render production manifests for review without applying them.</td></tr>
+<tr><td><code>docs/INTEGRATION.md</code>, <code>docs/openapi.yaml</code></td><td>Describe the JSON API and adapter contract.</td></tr>
+<tr><td><code>docs/PRODUCTION.md</code></td><td>Shows environment settings and real release/recovery checks.</td></tr>
+<tr><td><code>DemoController.kt</code></td><td>Checks input, starts a run, reads status, forwards a crash request.</td></tr>
+<tr><td><code>HistoryStatus.kt</code></td><td>Turns saved events into steps and logs.</td></tr>
+<tr><td><code>WorkerStatus.kt</code></td><td>Reads Kubernetes pod state/events; falls back to HTTP outside Kubernetes.</td></tr>
+<tr><td><code>WorkerModeRunner.kt</code></td><td>Registers code, starts polling, closes workers on shutdown.</td></tr>
+<tr><td><code>WorkerControlController.kt</code></td><td>Reports readiness; exits only when crash control is enabled.</td></tr>
+<tr><td><code>workflow/UserOrderWorkflow.kt</code></td><td>Defines workflow and query methods.</td></tr>
+<tr><td><code>workflow/UserOrderWorkflowImpl.kt</code></td><td>Orders the five activities and durable waits.</td></tr>
+<tr><td><code>workflow/UserOrderActivities.kt</code></td><td>Defines the activity call.</td></tr>
+<tr><td><code>workflow/UserOrderActivitiesImpl.kt</code></td><td>Simulates work and returns worker identity.</td></tr>
+<tr><td><code>application.properties</code></td><td>Sets mode, server, task queue, namespace, and crash control.</td></tr>
+<tr><td><code>index.html</code></td><td>Links both pages.</td></tr>
+<tr><td><code>temporal-what-is.html</code></td><td>Explains the flow and limits.</td></tr>
+<tr><td><code>temporal-live-demo.html</code></td><td>Starts and watches runs.</td></tr>
+<tr><td><code>build.gradle.kts</code>, <code>settings.gradle.kts</code>, <code>gradlew</code></td><td>Set dependencies, name the project, and run Gradle.</td></tr>
+<tr><td><code>Dockerfile</code>, <code>.dockerignore</code></td><td>Build the Java 25 image; omit local build files.</td></tr>
+<tr><td><code>k8s/namespace.yaml</code></td><td>Creates the Kubernetes namespace.</td></tr>
+<tr><td><code>k8s/temporal-dev.yaml</code></td><td>Runs PostgreSQL, Temporal, and Temporal UI.</td></tr>
+<tr><td><code>k8s/app.yaml</code></td><td>Runs API/worker pods and grants scoped pod/event read access.</td></tr>
+<tr><td><code>run-demo.sh</code></td><td>Starts the local stack; preserves an existing unmounted database.</td></tr>
+<tr><td><code>src/test</code></td><td>Checks history, status, and application wiring.</td></tr>
+<tr><td><code>HELP.md</code></td><td>Shows setup, recovery, backup, and migration commands.</td></tr>
+</tbody>
+</table>
+<p><code>TEMPORAL_NAMESPACE</code> selects a Temporal namespace (default: <code>default</code>). Create it in Temporal before using another value. This differs from Kubernetes namespace <code>temporal-demo</code>.</p>
+
+<h2>Deployment scope</h2>
+<p><code>UserOrderWorkflowImpl</code> sets the flow. <code>UserOrderActivitiesImpl</code> simulates work. <code>WorkerModeRunner</code> registers and starts workers. <code>DemoController</code> starts and observes runs. <code>HistoryStatus</code> builds progress from saved Temporal events, without requiring a live worker.</p>
+<p>The local stack is a recovery environment with simulated business actions and one worker to make downtime visible. The separate production baseline adds secure API/configuration and deployment boundaries. Go-live still requires your actual adapter contracts, secrets, ingress, Temporal deployment, backup restoration, load checks, and previous-release replay checks. A new database volume does not copy data from an existing unmounted database; migrate existing data before replacing that pod.</p>
+<p>For safe upgrades, keep v1 workflow code and its queue available for old runs. An incompatible flow needs a new contract or a tested Temporal versioning plan. Passing a replay test built from the same source is not proof that every previous production run is compatible. <a href="https://docs.temporal.io/best-practices/worker">Worker release guidance</a>.</p>
+<p><a href="/temporal-live-demo.html">Continue to workflow operations →</a></p>
+</body>
+</html>
